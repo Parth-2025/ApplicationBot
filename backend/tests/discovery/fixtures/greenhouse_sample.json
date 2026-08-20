@@ -1,0 +1,23 @@
+{
+  "jobs": [
+    {
+      "id": 8503792002,
+      "title": "Software Engineering Intern - Summer 2027",
+      "company_name": "GitLab",
+      "absolute_url": "https://job-boards.greenhouse.io/gitlab/jobs/8503792002",
+      "location": {"name": "Remote, United States"},
+      "updated_at": "2026-08-10T16:52:46-04:00",
+      "content": "&lt;div&gt;&lt;p&gt;Join GitLab as a Summer 2027 intern. Open to sophomores and juniors.&lt;/p&gt;&lt;/div&gt;"
+    },
+    {
+      "id": 9999999999,
+      "title": "Account Executive",
+      "company_name": "GitLab",
+      "absolute_url": "https://job-boards.greenhouse.io/gitlab/jobs/9999999999",
+      "location": {"name": "Remote, Italy"},
+      "updated_at": "2026-08-10T16:52:46-04:00",
+      "content": "&lt;div&gt;&lt;p&gt;Sales role, not an internship.&lt;/p&gt;&lt;/div&gt;"
+    }
+  ],
+  "meta": {"total": 2}
+}

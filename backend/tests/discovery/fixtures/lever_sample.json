@@ -1,0 +1,28 @@
+[
+  {
+    "id": "f4746da4-8eb8-43e2-b7ce-bf3c7cf9640d",
+    "text": "Machine Learning Intern - Summer 2027",
+    "hostedUrl": "https://jobs.lever.co/zoox/f4746da4-8eb8-43e2-b7ce-bf3c7cf9640d",
+    "categories": {
+      "commitment": "Intern",
+      "department": "Machine Learning",
+      "location": "Foster City, CA",
+      "team": "Perception"
+    },
+    "createdAt": 1777936261125,
+    "descriptionPlain": "Join Zoox as a Summer 2027 machine learning intern. Open to sophomores and juniors."
+  },
+  {
+    "id": "aaaa-bbbb",
+    "text": "Senior Staff Engineer",
+    "hostedUrl": "https://jobs.lever.co/zoox/aaaa-bbbb",
+    "categories": {
+      "commitment": "Full-time",
+      "department": "Software",
+      "location": "Foster City, CA",
+      "team": "Platform"
+    },
+    "createdAt": 1777936261125,
+    "descriptionPlain": "Senior full-time role, not an internship."
+  }
+]

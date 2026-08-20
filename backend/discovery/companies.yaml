@@ -1,0 +1,79 @@
+companies:
+  - name: "Stripe"
+    board_type: greenhouse
+    board_slug: stripe
+  - name: "Robinhood"
+    board_type: greenhouse
+    board_slug: robinhood
+  - name: "Coinbase"
+    board_type: greenhouse
+    board_slug: coinbase
+  - name: "Asana"
+    board_type: greenhouse
+    board_slug: asana
+  - name: "Affirm"
+    board_type: greenhouse
+    board_slug: affirm
+  - name: "Pinterest"
+    board_type: greenhouse
+    board_slug: pinterest
+  - name: "Airbnb"
+    board_type: greenhouse
+    board_slug: airbnb
+  - name: "Figma"
+    board_type: greenhouse
+    board_slug: figma
+  - name: "Discord"
+    board_type: greenhouse
+    board_slug: discord
+  - name: "Databricks"
+    board_type: greenhouse
+    board_slug: databricks
+  - name: "Brex"
+    board_type: greenhouse
+    board_slug: brex
+  - name: "Instacart"
+    board_type: greenhouse
+    board_slug: instacart
+  - name: "Cloudflare"
+    board_type: greenhouse
+    board_slug: cloudflare
+  - name: "Twilio"
+    board_type: greenhouse
+    board_slug: twilio
+  - name: "Dropbox"
+    board_type: greenhouse
+    board_slug: dropbox
+  - name: "GitLab"
+    board_type: greenhouse
+    board_slug: gitlab
+  - name: "Reddit"
+    board_type: greenhouse
+    board_slug: reddit
+  - name: "Samsara"
+    board_type: greenhouse
+    board_slug: samsara
+  - name: "Scale AI"
+    board_type: greenhouse
+    board_slug: scaleai
+  - name: "Palantir"
+    board_type: lever
+    board_slug: palantir
+  - name: "Zoox"
+    board_type: lever
+    board_slug: zoox
+
+career_pages:
+  - name: "Google"
+    url: "https://www.google.com/about/careers/applications/jobs/results/?q=intern"
+  - name: "Meta"
+    url: "https://www.metacareers.com/jobs/?q=intern"
+  - name: "Amazon"
+    url: "https://www.amazon.jobs/en/search?base_query=intern"
+
+search_queries:
+  - "AI engineering intern Summer 2027 apply"
+  - "machine learning engineer intern Summer 2027 apply"
+  - "software engineer intern Summer 2027 sophomore junior apply"
+  - "SWE intern Summer 2027 United States apply"
+  - "AI ML intern Summer 2027 paid United States apply"

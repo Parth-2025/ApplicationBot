@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.applicationbot.discovery</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>REPLACE_WITH_ABSOLUTE_PATH_TO/backend/venv/bin/python</string>
+        <string>REPLACE_WITH_ABSOLUTE_PATH_TO/backend/discover.py</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>REPLACE_WITH_ABSOLUTE_PATH_TO/backend</string>
+    <key>StartInterval</key>
+    <integer>21600</integer>
+    <key>StandardOutPath</key>
+    <string>REPLACE_WITH_ABSOLUTE_PATH_TO/backend/discovery.log</string>
+    <key>StandardErrorPath</key>
+    <string>REPLACE_WITH_ABSOLUTE_PATH_TO/backend/discovery.log</string>
+</dict>
+</plist>

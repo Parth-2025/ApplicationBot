@@ -57,6 +57,9 @@ class CareerPageAdapter:
         except GeminiError:
             return []
 
+        if not isinstance(results, list):
+            return []
+
         postings = []
         for entry in results:
             try:

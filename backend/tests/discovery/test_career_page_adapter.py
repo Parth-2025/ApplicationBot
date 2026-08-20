@@ -153,3 +153,36 @@ def test_malformed_entry_is_skipped_but_valid_entry_still_returned():
     assert len(postings) == 1
     assert postings[0].role_title == "SWE Intern"
     assert postings[0].company == "MixedCo"
+
+
+def test_non_list_gemini_response_skips_that_page_but_not_others():
+    page_client = _page_client(
+        {
+            "https://weirdco.example.com/careers": "<html>weird</html>",
+            "https://goodco.example.com/careers": "<html>good</html>",
+        }
+    )
+    gemini = FakeGeminiClient(
+        [
+            {"unexpected": "shape"},
+            [
+                {
+                    "role_title": "SWE Intern",
+                    "location": "Remote",
+                    "description": "desc",
+                    "url": "https://goodco.example.com/careers/swe",
+                }
+            ],
+        ]
+    )
+    adapter = CareerPageAdapter(
+        pages=[
+            CareerPageConfig(name="Weird Co", url="https://weirdco.example.com/careers"),
+            CareerPageConfig(name="Good Co", url="https://goodco.example.com/careers"),
+        ],
+        gemini_client=gemini,
+        client=page_client,
+    )
+    postings = adapter.fetch()
+    assert len(postings) == 1
+    assert postings[0].company == "Good Co"

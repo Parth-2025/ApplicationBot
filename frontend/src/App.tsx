@@ -2,6 +2,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ConfigProvider } from "antd";
 import JobTable from "./components/JobTable";
+import JobDetail from "./components/JobDetail";
 
 export default function App() {
   return (
@@ -10,6 +11,7 @@ export default function App() {
         <div style={{ padding: 24 }}>
           <Routes>
             <Route path="/" element={<JobTable />} />
+            <Route path="/jobs/:id" element={<JobDetail />} />
           </Routes>
         </div>
       </BrowserRouter>

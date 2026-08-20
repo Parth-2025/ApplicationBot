@@ -12,19 +12,27 @@ export interface Job {
   discovered_date: string;
   status: "new" | "tailored" | "applied" | "rejected" | "ignored";
   raw_job_description: string | null;
+  applied_date?: string | null;
+  application_number?: string | null;
+  notes?: string | null;
 }
 
 const API_BASE = "http://localhost:8000";
 
+async function extractErrorMessage(res: Response, fallback: string): Promise<string> {
+  const body = await res.json().catch(() => null);
+  return body?.detail ?? fallback;
+}
+
 export async function fetchJobs(): Promise<Job[]> {
   const res = await fetch(`${API_BASE}/jobs`);
-  if (!res.ok) throw new Error("Failed to fetch jobs");
+  if (!res.ok) throw new Error(await extractErrorMessage(res, "Failed to fetch jobs"));
   return res.json();
 }
 
 export async function fetchJob(id: number): Promise<Job> {
   const res = await fetch(`${API_BASE}/jobs/${id}`);
-  if (!res.ok) throw new Error("Failed to fetch job");
+  if (!res.ok) throw new Error(await extractErrorMessage(res, "Failed to fetch job"));
   return res.json();
 }
 
@@ -44,7 +52,8 @@ export async function markApplied(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-  if (!res.ok) throw new Error("Failed to mark job applied");
+  if (!res.ok)
+    throw new Error(await extractErrorMessage(res, "Failed to mark job applied"));
   return res.json();
 }
 
@@ -54,6 +63,7 @@ export async function updateJobStatus(id: number, status: string): Promise<Job> 
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ status }),
   });
-  if (!res.ok) throw new Error("Failed to update job status");
+  if (!res.ok)
+    throw new Error(await extractErrorMessage(res, "Failed to update job status"));
   return res.json();
 }

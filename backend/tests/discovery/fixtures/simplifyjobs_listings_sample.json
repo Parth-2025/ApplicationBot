@@ -1,0 +1,53 @@
+[
+  {
+    "source": "Simplify",
+    "category": "AI/ML/Data",
+    "company_name": "Grant Thornton",
+    "id": "45e6cd12-c55d-47f0-b650-b2c4b472ce45",
+    "title": "Tax Technology Intern - Summer 2027",
+    "active": true,
+    "terms": ["Summer 2027"],
+    "date_updated": 1770822643,
+    "date_posted": 1770822643,
+    "url": "https://ehzq.fa.us2.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1/job/114405",
+    "locations": ["Bellevue, WA"],
+    "company_url": "https://simplify.jobs/c/Grant-Thornton",
+    "is_visible": true,
+    "sponsorship": "Other",
+    "degrees": ["Bachelor's"]
+  },
+  {
+    "source": "Simplify",
+    "category": "Quant",
+    "company_name": "FHLBank Atlanta",
+    "id": "b6fbdfb9-cebf-429b-a7f2-e5c1e31611ed",
+    "title": "Capital Markets Intern",
+    "active": true,
+    "terms": ["Summer 2027"],
+    "date_updated": 1766516522,
+    "date_posted": 1766516522,
+    "url": "https://fhlbatl.wd1.myworkdayjobs.com/fhlbatl/job/Atlanta-Georgia/Capital-Markets-Intern_JR275",
+    "locations": ["Atlanta, GA"],
+    "company_url": "https://simplify.jobs/c/FHLBank-Atlanta",
+    "is_visible": true,
+    "sponsorship": "Other",
+    "degrees": []
+  },
+  {
+    "source": "Simplify",
+    "category": "Software Engineering",
+    "company_name": "Old Corp",
+    "id": "aaaaaaaa-0000-0000-0000-000000000000",
+    "title": "Backend Intern - Summer 2026",
+    "active": false,
+    "terms": ["Summer 2026"],
+    "date_updated": 1700000000,
+    "date_posted": 1700000000,
+    "url": "https://oldcorp.example.com/jobs/backend",
+    "locations": ["Austin, TX"],
+    "company_url": "https://simplify.jobs/c/Old-Corp",
+    "is_visible": true,
+    "sponsorship": "Other",
+    "degrees": []
+  }
+]

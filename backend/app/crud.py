@@ -9,7 +9,7 @@ class InvalidStatusTransition(Exception):
 
 ALLOWED_TRANSITIONS = {
     models.JobStatus.new: {models.JobStatus.tailored, models.JobStatus.ignored, models.JobStatus.rejected},
-    models.JobStatus.tailored: {models.JobStatus.applied, models.JobStatus.ignored, models.JobStatus.rejected},
+    models.JobStatus.tailored: {models.JobStatus.ignored, models.JobStatus.rejected},
     models.JobStatus.applied: {models.JobStatus.rejected},
     models.JobStatus.rejected: set(),
     models.JobStatus.ignored: set(),
@@ -72,7 +72,11 @@ def mark_applied(
     application_number: str | None = None,
     notes: str | None = None,
 ) -> models.Job:
-    job = update_job_status(db, job, models.JobStatus.applied)
+    if job.status != models.JobStatus.tailored:
+        raise InvalidStatusTransition(
+            f"Cannot transition job {job.id} from {job.status} to {models.JobStatus.applied}"
+        )
+    job.status = models.JobStatus.applied
     application = models.Application(
         job_id=job.id,
         applied_date=applied_date,

@@ -1,6 +1,7 @@
 // frontend/src/App.tsx
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ConfigProvider } from "antd";
+import JobTable from "./components/JobTable";
 
 export default function App() {
   return (
@@ -8,7 +9,7 @@ export default function App() {
       <BrowserRouter>
         <div style={{ padding: 24 }}>
           <Routes>
-            <Route path="/" element={<div>Job list coming in Task 5</div>} />
+            <Route path="/" element={<JobTable />} />
           </Routes>
         </div>
       </BrowserRouter>

@@ -3,7 +3,8 @@ import { useEffect, useState } from "react";
 import { Table, Tag, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { Link } from "react-router-dom";
-import { fetchJobs, Job } from "../api/client";
+import { fetchJobs } from "../api/client";
+import type { Job } from "../api/client";
 
 const statusColors: Record<Job["status"], string> = {
   new: "blue",
@@ -20,7 +21,9 @@ export default function JobTable() {
   useEffect(() => {
     fetchJobs()
       .then(setJobs)
-      .catch(() => message.error("Failed to load jobs"))
+      .catch((err) =>
+        message.error(err instanceof Error ? err.message : "Failed to load jobs")
+      )
       .finally(() => setLoading(false));
   }, []);
 

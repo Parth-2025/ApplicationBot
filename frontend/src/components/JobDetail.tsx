@@ -2,7 +2,8 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { Descriptions, Button, Space, message } from "antd";
-import { fetchJob, updateJobStatus, Job } from "../api/client";
+import { fetchJob, updateJobStatus } from "../api/client";
+import type { Job } from "../api/client";
 import MarkAppliedModal from "./MarkAppliedModal";
 
 export default function JobDetail() {
@@ -14,7 +15,9 @@ export default function JobDetail() {
     if (!id) return;
     fetchJob(Number(id))
       .then(setJob)
-      .catch(() => message.error("Failed to load job"));
+      .catch((err) =>
+        message.error(err instanceof Error ? err.message : "Failed to load job")
+      );
   };
 
   useEffect(load, [id]);
@@ -26,10 +29,25 @@ export default function JobDetail() {
       await updateJobStatus(job.id, "ignored");
       message.success("Job marked ignored");
       load();
-    } catch {
-      message.error("Failed to update job");
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : "Failed to update job");
     }
   };
+
+  const handleReject = async () => {
+    try {
+      await updateJobStatus(job.id, "rejected");
+      message.success("Job marked rejected");
+      load();
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : "Failed to update job");
+    }
+  };
+
+  // Mirrors backend ALLOWED_TRANSITIONS: new, tailored, and applied can all
+  // transition to rejected.
+  const canReject =
+    job.status === "new" || job.status === "tailored" || job.status === "applied";
 
   return (
     <div>
@@ -45,6 +63,17 @@ export default function JobDetail() {
         <Descriptions.Item label="Job Description">
           {job.raw_job_description ?? "—"}
         </Descriptions.Item>
+        {job.status === "applied" && (
+          <>
+            <Descriptions.Item label="Applied Date">
+              {job.applied_date ?? "—"}
+            </Descriptions.Item>
+            <Descriptions.Item label="Application Number">
+              {job.application_number ?? "—"}
+            </Descriptions.Item>
+            <Descriptions.Item label="Notes">{job.notes ?? "—"}</Descriptions.Item>
+          </>
+        )}
       </Descriptions>
 
       {job.status === "tailored" && (
@@ -67,6 +96,11 @@ export default function JobDetail() {
         {(job.status === "new" || job.status === "tailored") && (
           <Button danger onClick={handleIgnore}>
             Ignore
+          </Button>
+        )}
+        {canReject && (
+          <Button danger onClick={handleReject}>
+            Reject
           </Button>
         )}
       </Space>

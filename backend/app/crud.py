@@ -57,7 +57,7 @@ def update_job_status(
 ) -> models.Job:
     if new_status not in ALLOWED_TRANSITIONS[job.status]:
         raise InvalidStatusTransition(
-            f"Cannot transition job {job.id} from {job.status} to {new_status}"
+            f"Cannot transition job {job.id} from {job.status.value} to {new_status.value}"
         )
     job.status = new_status
     db.commit()
@@ -74,16 +74,24 @@ def mark_applied(
 ) -> models.Job:
     if job.status != models.JobStatus.tailored:
         raise InvalidStatusTransition(
-            f"Cannot transition job {job.id} from {job.status} to {models.JobStatus.applied}"
+            f"Cannot transition job {job.id} from {job.status.value} to {models.JobStatus.applied.value}"
         )
     job.status = models.JobStatus.applied
-    application = models.Application(
-        job_id=job.id,
-        applied_date=applied_date,
-        application_number=application_number,
-        notes=notes,
+
+    application = (
+        db.query(models.Application)
+        .filter(models.Application.job_id == job.id)
+        .order_by(models.Application.id.desc())
+        .first()
     )
-    db.add(application)
+    if application is None:
+        application = models.Application(job_id=job.id)
+        db.add(application)
+
+    application.applied_date = applied_date
+    application.application_number = application_number
+    application.notes = notes
+
     db.commit()
     db.refresh(job)
     return job

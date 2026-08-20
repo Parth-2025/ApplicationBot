@@ -104,6 +104,67 @@ def test_skips_result_on_gemini_failure():
     assert postings == []
 
 
+def test_skips_result_when_gemini_output_missing_required_fields():
+    search_client = _search_client(
+        [{"title": "AI Intern - Acme", "link": "https://acme.example.com/jobs/1", "snippet": "..."}]
+    )
+    page_client = _page_client({"https://acme.example.com/jobs/1": "<html><body>content</body></html>"})
+    gemini = FakeGeminiClient([{"is_job_posting": True}])
+    adapter = WebSearchAdapter(
+        queries=["AI engineering intern Summer 2027"],
+        google_api_key="key",
+        google_cx="cx",
+        gemini_client=gemini,
+        search_client=search_client,
+        page_client=page_client,
+    )
+    postings = adapter.fetch()
+    assert postings == []
+
+
+def test_search_failure_for_one_query_does_not_abort_other_queries():
+    def handler(request: httpx.Request) -> httpx.Response:
+        query = request.url.params.get("q")
+        if query == "bad query":
+            return httpx.Response(429, json={"error": "rate limited"})
+        return httpx.Response(
+            200,
+            json={
+                "items": [
+                    {"title": "AI Intern - Acme", "link": "https://acme.example.com/jobs/1", "snippet": "..."}
+                ]
+            },
+        )
+
+    search_client = httpx.Client(transport=httpx.MockTransport(handler))
+    page_client = _page_client(
+        {"https://acme.example.com/jobs/1": "<html><body>AI Engineering Intern at Acme</body></html>"}
+    )
+    gemini = FakeGeminiClient(
+        [
+            {
+                "is_job_posting": True,
+                "company": "Acme",
+                "role_title": "AI Engineering Intern",
+                "location": "Remote",
+                "description": "AI Engineering Intern at Acme",
+            }
+        ]
+    )
+    adapter = WebSearchAdapter(
+        queries=["bad query", "good query"],
+        google_api_key="key",
+        google_cx="cx",
+        gemini_client=gemini,
+        search_client=search_client,
+        page_client=page_client,
+    )
+    postings = adapter.fetch()
+
+    assert len(postings) == 1
+    assert postings[0].company == "Acme"
+
+
 def test_respects_max_results_per_query():
     items = [
         {"title": f"Result {i}", "link": f"https://example.com/{i}", "snippet": "..."} for i in range(10)

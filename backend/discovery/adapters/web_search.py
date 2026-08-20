@@ -45,7 +45,11 @@ class WebSearchAdapter:
     def fetch(self) -> list[RawPosting]:
         postings: list[RawPosting] = []
         for query in self.queries:
-            for item in self._search(query)[: self.max_results_per_query]:
+            try:
+                results = self._search(query)
+            except (httpx.HTTPError, ValueError):
+                continue
+            for item in results[: self.max_results_per_query]:
                 posting = self._extract_posting(item["link"])
                 if posting is not None:
                     postings.append(posting)
@@ -76,14 +80,17 @@ class WebSearchAdapter:
         except GeminiError:
             return None
 
-        if not result.get("is_job_posting"):
-            return None
+        try:
+            if not result.get("is_job_posting"):
+                return None
 
-        return RawPosting(
-            company=result["company"],
-            role_title=result["role_title"],
-            source="google_search",
-            source_url=url,
-            location=result.get("location"),
-            raw_description=result.get("description"),
-        )
+            return RawPosting(
+                company=result["company"],
+                role_title=result["role_title"],
+                source="google_search",
+                source_url=url,
+                location=result.get("location"),
+                raw_description=result.get("description"),
+            )
+        except (KeyError, AttributeError):
+            return None

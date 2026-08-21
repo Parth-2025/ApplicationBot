@@ -11,9 +11,11 @@ class FakeModel:
     def __init__(self, responses):
         self._responses = list(responses)
         self.calls = 0
+        self.last_request_options = None
 
-    def generate_content(self, prompt):
+    def generate_content(self, prompt, request_options=None):
         self.calls += 1
+        self.last_request_options = request_options
         response = self._responses.pop(0)
         if isinstance(response, Exception):
             raise response
@@ -53,3 +55,17 @@ def test_generate_json_raises_gemini_error_on_invalid_json():
     client = GeminiClient(model=model)
     with pytest.raises(GeminiError):
         client.generate_json("prompt", retries=0)
+
+
+def test_generate_content_called_with_request_timeout():
+    model = FakeModel(['{"a": 1}'])
+    client = GeminiClient(model=model, request_timeout=15.0)
+    client.generate_json("prompt")
+    assert model.last_request_options == {"timeout": 15.0}
+
+
+def test_generate_content_uses_default_request_timeout():
+    model = FakeModel(['{"a": 1}'])
+    client = GeminiClient(model=model)
+    client.generate_json("prompt")
+    assert model.last_request_options == {"timeout": 30.0}

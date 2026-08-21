@@ -11,7 +11,14 @@ class GeminiError(Exception):
 
 
 class GeminiClient:
-    def __init__(self, api_key: str | None = None, model_name: str | None = None, model=None):
+    def __init__(
+        self,
+        api_key: str | None = None,
+        model_name: str | None = None,
+        model=None,
+        request_timeout: float = 30.0,
+    ):
+        self._request_timeout = request_timeout
         if model is not None:
             self._model = model
             return
@@ -22,7 +29,9 @@ class GeminiClient:
         last_error: Exception | None = None
         for attempt in range(retries + 1):
             try:
-                response = self._model.generate_content(prompt)
+                response = self._model.generate_content(
+                    prompt, request_options={"timeout": self._request_timeout}
+                )
                 text = response.text.strip()
                 if text.startswith("```"):
                     text = text.strip("`")

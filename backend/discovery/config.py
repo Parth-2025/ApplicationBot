@@ -59,7 +59,7 @@ def get_gemini_api_key() -> str:
 
 
 def get_gemini_model_name() -> str:
-    return os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+    return os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
 
 
 def get_google_search_config() -> tuple[str, str]:

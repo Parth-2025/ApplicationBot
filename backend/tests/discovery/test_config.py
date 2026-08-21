@@ -61,7 +61,7 @@ def test_get_gemini_api_key_present(monkeypatch):
 
 def test_get_gemini_model_name_defaults(monkeypatch):
     monkeypatch.delenv("GEMINI_MODEL", raising=False)
-    assert config.get_gemini_model_name() == "gemini-2.0-flash"
+    assert config.get_gemini_model_name() == "gemini-3.6-flash"
 
 
 def test_get_gemini_model_name_override(monkeypatch):

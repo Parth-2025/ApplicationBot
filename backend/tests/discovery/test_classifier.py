@@ -1,6 +1,7 @@
+import pytest
 from discovery.adapters.base import RawPosting
-from discovery.classifier import classify_posting
-from discovery.gemini_client import GeminiError
+from discovery.classifier import classify_posting, classify_postings_batch
+from discovery.gemini_client import GeminiError, GeminiQuotaExhaustedError
 
 
 class FakeGeminiClient:
@@ -150,3 +151,99 @@ def test_classify_posting_includes_posting_fields_in_prompt():
     classify_posting(client, _posting(company="UniqueCo", role_title="Unique Role Title"))
     assert "UniqueCo" in client.last_prompt
     assert "Unique Role Title" in client.last_prompt
+
+
+def _passing_entry(**overrides):
+    entry = {
+        "still_open": True,
+        "is_summer_2027": True,
+        "is_paid": True,
+        "is_us_based": True,
+        "eligibility": "soph_junior",
+        "role_category": "swe_ai_ml",
+    }
+    entry.update(overrides)
+    return entry
+
+
+def test_classify_postings_batch_returns_empty_list_for_no_postings():
+    client = FakeGeminiClient([])
+    assert classify_postings_batch(client, []) == []
+
+
+def test_classify_postings_batch_maps_results_in_order():
+    client = FakeGeminiClient(
+        [
+            _passing_entry(),
+            _passing_entry(is_summer_2027=False),
+            _passing_entry(role_category="other"),
+        ]
+    )
+    postings = [
+        _posting(company="Alpha", source_url="https://example.com/1"),
+        _posting(company="Beta", source_url="https://example.com/2"),
+        _posting(company="Gamma", source_url="https://example.com/3"),
+    ]
+    results = classify_postings_batch(client, postings)
+    assert len(results) == 3
+    assert results[0].passed is True
+    assert results[1].passed is False
+    assert results[2].passed is False
+
+
+def test_classify_postings_batch_includes_all_postings_in_prompt():
+    client = FakeGeminiClient([_passing_entry(), _passing_entry()])
+    postings = [
+        _posting(company="UniqueCo1", role_title="Role One", source_url="https://example.com/1"),
+        _posting(company="UniqueCo2", role_title="Role Two", source_url="https://example.com/2"),
+    ]
+    classify_postings_batch(client, postings)
+    assert "UniqueCo1" in client.last_prompt
+    assert "Role One" in client.last_prompt
+    assert "UniqueCo2" in client.last_prompt
+    assert "Role Two" in client.last_prompt
+
+
+def test_classify_postings_batch_returns_all_none_on_gemini_failure():
+    client = FakeGeminiClient(GeminiError("boom"))
+    postings = [_posting(source_url="https://example.com/1"), _posting(source_url="https://example.com/2")]
+    results = classify_postings_batch(client, postings)
+    assert results == [None, None]
+
+
+def test_classify_postings_batch_returns_all_none_when_response_is_not_a_list():
+    client = FakeGeminiClient({"not": "a list"})
+    postings = [_posting(source_url="https://example.com/1")]
+    results = classify_postings_batch(client, postings)
+    assert results == [None]
+
+
+def test_classify_postings_batch_handles_malformed_entry_without_crashing():
+    client = FakeGeminiClient([_passing_entry(), "not a dict", _passing_entry()])
+    postings = [
+        _posting(source_url="https://example.com/1"),
+        _posting(source_url="https://example.com/2"),
+        _posting(source_url="https://example.com/3"),
+    ]
+    results = classify_postings_batch(client, postings)
+    assert results[0].passed is True
+    assert results[1] is None
+    assert results[2].passed is True
+
+
+def test_classify_postings_batch_handles_fewer_results_than_postings():
+    client = FakeGeminiClient([_passing_entry()])
+    postings = [
+        _posting(source_url="https://example.com/1"),
+        _posting(source_url="https://example.com/2"),
+    ]
+    results = classify_postings_batch(client, postings)
+    assert results[0].passed is True
+    assert results[1] is None
+
+
+def test_classify_postings_batch_propagates_quota_exhausted_error():
+    client = FakeGeminiClient(GeminiQuotaExhaustedError("daily quota exhausted"))
+    postings = [_posting(source_url="https://example.com/1")]
+    with pytest.raises(GeminiQuotaExhaustedError):
+        classify_postings_batch(client, postings)

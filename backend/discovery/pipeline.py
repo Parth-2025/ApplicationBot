@@ -1,5 +1,3 @@
-import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import date
 from difflib import SequenceMatcher
@@ -9,7 +7,8 @@ from app.database import SessionLocal
 from app.models import Eligibility, JobStatus
 
 from .adapters.base import Adapter, RawPosting
-from .classifier import classify_posting
+from .classifier import classify_postings_batch
+from .gemini_client import GeminiQuotaExhaustedError
 
 
 @dataclass
@@ -37,12 +36,16 @@ def _is_fuzzy_duplicate(posting: RawPosting, existing_jobs) -> bool:
     return False
 
 
+def _chunk(items: list, size: int):
+    for i in range(0, len(items), size):
+        yield items[i : i + size]
+
+
 def run_discovery(
     adapters: list[Adapter],
     classifier_client,
     db_session_factory=SessionLocal,
-    sleep_between_gemini_calls: float = 1.0,
-    max_concurrent_classifications: int = 5,
+    classification_batch_size: int = 25,
 ) -> RunSummary:
     summary = RunSummary()
     all_postings: list[RawPosting] = []
@@ -55,32 +58,27 @@ def run_discovery(
 
     summary.found = len(all_postings)
 
-    def _classify_one(posting: RawPosting):
-        result = classify_posting(classifier_client, posting)
-        if sleep_between_gemini_calls:
-            time.sleep(sleep_between_gemini_calls)
-        return result
-
     db = db_session_factory()
     try:
         existing_jobs = crud.list_jobs(db)
 
-        # Classification calls are I/O-bound (network round-trips to
-        # Gemini), so a small thread pool gives a near-linear speedup over
-        # doing them one at a time. Each worker still paces itself with
-        # the same sleep, so aggregate throughput scales with worker count
-        # while any single worker's call rate stays bounded. Results are
-        # written to the DB as each one completes (not batched at the
-        # end) so a killed or crashed run keeps whatever it already found
-        # instead of losing the whole run's work.
-        with ThreadPoolExecutor(max_workers=max_concurrent_classifications) as executor:
-            future_to_posting = {
-                executor.submit(_classify_one, posting): posting for posting in all_postings
-            }
-            for future in as_completed(future_to_posting):
-                posting = future_to_posting[future]
-                result = future.result()
+        # Batching many postings into one Gemini call (instead of one call
+        # per posting) is what makes classification feasible at all under
+        # the free tier's daily request cap. GeminiClient itself paces
+        # every call across its callers, so batches run sequentially here
+        # rather than concurrently - concurrency wouldn't add throughput
+        # under a shared rate limit, only complexity. Each batch's results
+        # are written to the DB immediately (not held until the whole run
+        # finishes) so a killed/crashed run, or one that hits the daily
+        # quota partway through, keeps whatever it already found.
+        for batch in _chunk(all_postings, classification_batch_size):
+            try:
+                results = classify_postings_batch(classifier_client, batch)
+            except GeminiQuotaExhaustedError as exc:
+                summary.errors.append(f"Stopped early: {exc}")
+                break
 
+            for posting, result in zip(batch, results):
                 if result is None or not result.passed:
                     continue
                 summary.passed_filter += 1

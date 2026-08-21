@@ -1,4 +1,5 @@
 # backend/tests/discovery/test_pipeline.py
+import re
 from datetime import date
 
 import pytest
@@ -9,7 +10,6 @@ from app import crud, schemas
 from app.database import Base
 from app.models import Eligibility, JobStatus
 from discovery.adapters.base import RawPosting
-from discovery.classifier import ClassificationResult
 from discovery.pipeline import run_discovery
 
 
@@ -33,18 +33,32 @@ class FakeAdapter:
 
 
 class FakeClassifierClient:
-    """Stands in for the Gemini client passed to classify_posting."""
+    """Stands in for the Gemini client passed to classify_postings_batch.
+
+    Each generate_json call receives a batch prompt covering several
+    postings; this scans the prompt for each "Role title: X" line (in the
+    order they appear, matching classify_postings_batch's per-posting
+    blocks) and returns the configured result for each, as a JSON array.
+    """
 
     def __init__(self, results_by_role_title: dict):
         self.results_by_role_title = results_by_role_title
+        self.prompts: list[str] = []
 
     def generate_json(self, prompt, retries=1):
-        for role_title, result in self.results_by_role_title.items():
-            if role_title in prompt:
-                if isinstance(result, Exception):
-                    raise result
-                return result
-        raise AssertionError(f"No fake classifier result configured for prompt: {prompt[:200]}")
+        self.prompts.append(prompt)
+        role_titles_in_order = re.findall(r"Role title: (.+)", prompt)
+        response = []
+        for title in role_titles_in_order:
+            for key, result in self.results_by_role_title.items():
+                if key in title:
+                    if isinstance(result, Exception):
+                        raise result
+                    response.append(result)
+                    break
+            else:
+                raise AssertionError(f"No fake classifier result configured for role title: {title}")
+        return response
 
 
 def _posting(**overrides):
@@ -75,10 +89,7 @@ def test_writes_postings_that_pass_classification(db_session_factory):
     adapter = FakeAdapter(postings=[_posting()])
     client = FakeClassifierClient({"AI Engineering Intern": _passing_result()})
 
-    summary = run_discovery(
-        adapters=[adapter], classifier_client=client, db_session_factory=db_session_factory,
-        sleep_between_gemini_calls=0,
-    )
+    summary = run_discovery(adapters=[adapter], classifier_client=client, db_session_factory=db_session_factory)
 
     assert summary.found == 1
     assert summary.passed_filter == 1
@@ -98,10 +109,7 @@ def test_skips_postings_that_fail_classification(db_session_factory):
     failing_result = {**_passing_result(), "role_category": "other"}
     client = FakeClassifierClient({"AI Engineering Intern": failing_result})
 
-    summary = run_discovery(
-        adapters=[adapter], classifier_client=client, db_session_factory=db_session_factory,
-        sleep_between_gemini_calls=0,
-    )
+    summary = run_discovery(adapters=[adapter], classifier_client=client, db_session_factory=db_session_factory)
 
     assert summary.found == 1
     assert summary.passed_filter == 0
@@ -124,10 +132,7 @@ def test_writes_posting_with_unpaid_non_us_not_open_but_recorded_as_data(db_sess
     }
     client = FakeClassifierClient({"AI Engineering Intern": result})
 
-    summary = run_discovery(
-        adapters=[adapter], classifier_client=client, db_session_factory=db_session_factory,
-        sleep_between_gemini_calls=0,
-    )
+    summary = run_discovery(adapters=[adapter], classifier_client=client, db_session_factory=db_session_factory)
 
     assert summary.written == 1
 
@@ -149,7 +154,6 @@ def test_one_adapter_failing_does_not_stop_others(db_session_factory):
         adapters=[broken_adapter, working_adapter],
         classifier_client=client,
         db_session_factory=db_session_factory,
-        sleep_between_gemini_calls=0,
     )
 
     assert summary.written == 1
@@ -183,10 +187,7 @@ def test_fuzzy_duplicate_from_different_source_is_skipped(db_session_factory):
     )
     client = FakeClassifierClient({"AI Engineering Intern": _passing_result()})
 
-    summary = run_discovery(
-        adapters=[adapter], classifier_client=client, db_session_factory=db_session_factory,
-        sleep_between_gemini_calls=0,
-    )
+    summary = run_discovery(adapters=[adapter], classifier_client=client, db_session_factory=db_session_factory)
 
     assert summary.passed_filter == 1
     assert summary.written == 0  # duplicate, not written again
@@ -201,10 +202,7 @@ def test_gemini_classification_failure_is_skipped_not_counted_as_error(db_sessio
     adapter = FakeAdapter(postings=[_posting()])
     client = FakeClassifierClient({"AI Engineering Intern": GeminiError("boom")})
 
-    summary = run_discovery(
-        adapters=[adapter], classifier_client=client, db_session_factory=db_session_factory,
-        sleep_between_gemini_calls=0,
-    )
+    summary = run_discovery(adapters=[adapter], classifier_client=client, db_session_factory=db_session_factory)
 
     assert summary.found == 1
     assert summary.passed_filter == 0
@@ -212,16 +210,13 @@ def test_gemini_classification_failure_is_skipped_not_counted_as_error(db_sessio
     assert summary.errors == []
 
 
-def test_concurrent_classification_keeps_results_matched_to_their_posting(db_session_factory):
-    # Classification runs on a thread pool for speed - verify each posting
-    # still ends up written under its own correct company/role, not mixed
-    # up with another posting's result under concurrency. Company/role
-    # names must be genuinely distinct (not near-duplicates of each other)
-    # so the fuzzy-dedup check doesn't collapse them into one write.
+def test_batches_postings_into_fewer_gemini_calls(db_session_factory):
+    # Batching is what makes classification feasible under the free
+    # tier's daily request cap - verify multiple postings share one call
+    # (one prompt covering the whole batch) rather than one call each.
     companies = [
         "Alpha Robotics", "Beacon Systems", "Cobalt Analytics", "Driftwood Labs",
-        "Everline Health", "Fjordly Games", "Granite Freight", "Hollow Point Security",
-        "Ironclad Finance", "Jubilee Media",
+        "Everline Health",
     ]
     postings = [
         _posting(
@@ -229,27 +224,86 @@ def test_concurrent_classification_keeps_results_matched_to_their_posting(db_ses
             role_title=f"AI Engineering Intern - Team {companies[i]}",
             source_url=f"https://example.com/jobs/{i}",
         )
-        for i in range(10)
+        for i in range(5)
     ]
     adapter = FakeAdapter(postings=postings)
+    client = FakeClassifierClient({f"Team {companies[i]}": _passing_result() for i in range(5)})
+
+    summary = run_discovery(
+        adapters=[adapter],
+        classifier_client=client,
+        db_session_factory=db_session_factory,
+        classification_batch_size=25,
+    )
+
+    assert summary.found == 5
+    assert summary.written == 5
+    assert len(client.prompts) == 1  # all 5 postings fit in one batch call
+
+    jobs = crud.list_jobs(db_session_factory())
+    assert len(jobs) == 5
+    for company in companies:
+        matching = [j for j in jobs if j.company == company]
+        assert len(matching) == 1
+        assert matching[0].role_title == f"AI Engineering Intern - Team {company}"
+
+
+def test_batch_size_splits_postings_across_multiple_calls(db_session_factory):
+    companies = ["Alpha Robotics", "Beacon Systems", "Cobalt Analytics"]
+    postings = [
+        _posting(
+            company=companies[i],
+            role_title=f"AI Engineering Intern - Team {companies[i]}",
+            source_url=f"https://example.com/jobs/{i}",
+        )
+        for i in range(3)
+    ]
+    adapter = FakeAdapter(postings=postings)
+    client = FakeClassifierClient({f"Team {companies[i]}": _passing_result() for i in range(3)})
+
+    summary = run_discovery(
+        adapters=[adapter],
+        classifier_client=client,
+        db_session_factory=db_session_factory,
+        classification_batch_size=2,
+    )
+
+    assert summary.written == 3
+    assert len(client.prompts) == 2  # 2 postings in the first call, 1 in the second
+
+
+def test_quota_exhausted_stops_run_but_keeps_progress_already_made(db_session_factory):
+    from discovery.gemini_client import GeminiQuotaExhaustedError
+
+    companies = ["Alpha Robotics", "Beacon Systems", "Cobalt Analytics"]
+    postings = [
+        _posting(
+            company=companies[i],
+            role_title=f"AI Engineering Intern - Team {companies[i]}",
+            source_url=f"https://example.com/jobs/{i}",
+        )
+        for i in range(3)
+    ]
+    adapter = FakeAdapter(postings=postings)
+    # First batch (size 1) succeeds, second batch raises quota-exhausted.
     client = FakeClassifierClient(
-        {f"Team {companies[i]}": _passing_result() for i in range(10)}
+        {
+            "Team Alpha Robotics": _passing_result(),
+            "Team Beacon Systems": GeminiQuotaExhaustedError("daily quota exhausted"),
+        }
     )
 
     summary = run_discovery(
         adapters=[adapter],
         classifier_client=client,
         db_session_factory=db_session_factory,
-        sleep_between_gemini_calls=0,
-        max_concurrent_classifications=5,
+        classification_batch_size=1,
     )
 
-    assert summary.found == 10
-    assert summary.written == 10
+    assert summary.written == 1  # Alpha Robotics made it in before the stop
+    assert len(summary.errors) == 1
+    assert "Stopped early" in summary.errors[0]
 
     jobs = crud.list_jobs(db_session_factory())
-    assert len(jobs) == 10
-    for company in companies:
-        matching = [j for j in jobs if j.company == company]
-        assert len(matching) == 1
-        assert matching[0].role_title == f"AI Engineering Intern - Team {company}"
+    assert len(jobs) == 1
+    assert jobs[0].company == "Alpha Robotics"

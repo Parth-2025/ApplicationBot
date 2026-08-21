@@ -1,3 +1,5 @@
+import time
+
 import pytest
 from discovery.gemini_client import GeminiClient, GeminiError
 
@@ -69,3 +71,21 @@ def test_generate_content_uses_default_request_timeout():
     client = GeminiClient(model=model)
     client.generate_json("prompt")
     assert model.last_request_options == {"timeout": 30.0}
+
+
+class HangingModel:
+    """Simulates the SDK not honoring its own request_options timeout."""
+
+    def generate_content(self, prompt, request_options=None):
+        time.sleep(5)
+        return FakeResponse('{"a": 1}')
+
+
+def test_hard_deadline_terminates_call_that_ignores_sdk_timeout():
+    model = HangingModel()
+    client = GeminiClient(model=model, request_timeout=0.2)
+    start = time.monotonic()
+    with pytest.raises(GeminiError):
+        client.generate_json("prompt", retries=0)
+    elapsed = time.monotonic() - start
+    assert elapsed < 2.0  # bounded by request_timeout, not the model's 5s sleep

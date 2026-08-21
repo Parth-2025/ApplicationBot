@@ -1,5 +1,5 @@
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import date
 from difflib import SequenceMatcher
@@ -9,7 +9,7 @@ from app.database import SessionLocal
 from app.models import Eligibility, JobStatus
 
 from .adapters.base import Adapter, RawPosting
-from .classifier import ClassificationResult, classify_posting
+from .classifier import classify_posting
 
 
 @dataclass
@@ -37,28 +37,6 @@ def _is_fuzzy_duplicate(posting: RawPosting, existing_jobs) -> bool:
     return False
 
 
-def _classify_postings(
-    classifier_client,
-    postings: list[RawPosting],
-    sleep_between_gemini_calls: float,
-    max_concurrent_classifications: int,
-) -> list[ClassificationResult | None]:
-    def _classify_one(posting: RawPosting) -> ClassificationResult | None:
-        result = classify_posting(classifier_client, posting)
-        if sleep_between_gemini_calls:
-            time.sleep(sleep_between_gemini_calls)
-        return result
-
-    # Classification calls are I/O-bound (network round-trips to Gemini),
-    # so a small thread pool gives a near-linear speedup over doing them
-    # one at a time. Each worker still paces itself with the same sleep,
-    # so aggregate throughput scales with worker count while any single
-    # worker's call rate stays bounded, keeping this within free-tier
-    # expectations rather than firing every call at once.
-    with ThreadPoolExecutor(max_workers=max_concurrent_classifications) as executor:
-        return list(executor.map(_classify_one, postings))
-
-
 def run_discovery(
     adapters: list[Adapter],
     classifier_client,
@@ -77,45 +55,62 @@ def run_discovery(
 
     summary.found = len(all_postings)
 
-    classification_results = _classify_postings(
-        classifier_client, all_postings, sleep_between_gemini_calls, max_concurrent_classifications
-    )
+    def _classify_one(posting: RawPosting):
+        result = classify_posting(classifier_client, posting)
+        if sleep_between_gemini_calls:
+            time.sleep(sleep_between_gemini_calls)
+        return result
 
     db = db_session_factory()
     try:
         existing_jobs = crud.list_jobs(db)
 
-        for posting, result in zip(all_postings, classification_results):
-            if result is None or not result.passed:
-                continue
-            summary.passed_filter += 1
+        # Classification calls are I/O-bound (network round-trips to
+        # Gemini), so a small thread pool gives a near-linear speedup over
+        # doing them one at a time. Each worker still paces itself with
+        # the same sleep, so aggregate throughput scales with worker count
+        # while any single worker's call rate stays bounded. Results are
+        # written to the DB as each one completes (not batched at the
+        # end) so a killed or crashed run keeps whatever it already found
+        # instead of losing the whole run's work.
+        with ThreadPoolExecutor(max_workers=max_concurrent_classifications) as executor:
+            future_to_posting = {
+                executor.submit(_classify_one, posting): posting for posting in all_postings
+            }
+            for future in as_completed(future_to_posting):
+                posting = future_to_posting[future]
+                result = future.result()
 
-            if _is_fuzzy_duplicate(posting, existing_jobs):
-                continue
+                if result is None or not result.passed:
+                    continue
+                summary.passed_filter += 1
 
-            try:
-                eligibility = Eligibility(result.eligibility)
-            except ValueError:
-                eligibility = Eligibility.other
-            job = crud.create_or_update_job(
-                db,
-                schemas.JobCreate(
-                    company=posting.company,
-                    role_title=posting.role_title,
-                    source=posting.source,
-                    source_url=posting.source_url,
-                    location=posting.location,
-                    paid=result.paid,
-                    eligibility=eligibility,
-                    still_open=result.still_open,
-                    us_based=result.us_based,
-                    posted_date=posting.posted_date,
-                    discovered_date=date.today(),
-                    raw_job_description=posting.raw_description,
-                ),
-            )
-            existing_jobs.append(job)
-            summary.written += 1
+                if _is_fuzzy_duplicate(posting, existing_jobs):
+                    continue
+
+                try:
+                    eligibility = Eligibility(result.eligibility)
+                except ValueError:
+                    eligibility = Eligibility.other
+                job = crud.create_or_update_job(
+                    db,
+                    schemas.JobCreate(
+                        company=posting.company,
+                        role_title=posting.role_title,
+                        source=posting.source,
+                        source_url=posting.source_url,
+                        location=posting.location,
+                        paid=result.paid,
+                        eligibility=eligibility,
+                        still_open=result.still_open,
+                        us_based=result.us_based,
+                        posted_date=posting.posted_date,
+                        discovered_date=date.today(),
+                        raw_job_description=posting.raw_description,
+                    ),
+                )
+                existing_jobs.append(job)
+                summary.written += 1
     finally:
         db.close()
 

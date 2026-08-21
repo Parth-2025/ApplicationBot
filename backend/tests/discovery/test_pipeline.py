@@ -93,8 +93,9 @@ def test_writes_postings_that_pass_classification(db_session_factory):
 
 
 def test_skips_postings_that_fail_classification(db_session_factory):
+    # Only role category + Summer 2027 term are hard filters now.
     adapter = FakeAdapter(postings=[_posting()])
-    failing_result = {**_passing_result(), "is_paid": False}
+    failing_result = {**_passing_result(), "role_category": "other"}
     client = FakeClassifierClient({"AI Engineering Intern": failing_result})
 
     summary = run_discovery(
@@ -108,6 +109,35 @@ def test_skips_postings_that_fail_classification(db_session_factory):
 
     db = db_session_factory()
     assert crud.list_jobs(db) == []
+
+
+def test_writes_posting_with_unpaid_non_us_not_open_but_recorded_as_data(db_session_factory):
+    # paid/us_based/still_open/eligibility no longer gate whether a posting
+    # is written - they're recorded as data on the job.
+    adapter = FakeAdapter(postings=[_posting()])
+    result = {
+        **_passing_result(),
+        "is_paid": False,
+        "is_us_based": False,
+        "still_open": False,
+        "eligibility": "senior_only",
+    }
+    client = FakeClassifierClient({"AI Engineering Intern": result})
+
+    summary = run_discovery(
+        adapters=[adapter], classifier_client=client, db_session_factory=db_session_factory,
+        sleep_between_gemini_calls=0,
+    )
+
+    assert summary.written == 1
+
+    db = db_session_factory()
+    jobs = crud.list_jobs(db)
+    assert len(jobs) == 1
+    assert jobs[0].paid is False
+    assert jobs[0].us_based is False
+    assert jobs[0].still_open is False
+    assert jobs[0].eligibility == Eligibility.senior_only
 
 
 def test_one_adapter_failing_does_not_stop_others(db_session_factory):

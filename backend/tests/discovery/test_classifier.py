@@ -28,7 +28,7 @@ def _posting(**overrides):
     return RawPosting(**defaults)
 
 
-def test_classify_posting_passes_when_all_criteria_met():
+def test_classify_posting_passes_when_role_and_term_match():
     client = FakeGeminiClient(
         {
             "still_open": True,
@@ -43,9 +43,13 @@ def test_classify_posting_passes_when_all_criteria_met():
     assert result.passed is True
     assert result.eligibility == "soph_junior"
     assert result.paid is True
+    assert result.still_open is True
+    assert result.us_based is True
 
 
-def test_classify_posting_fails_when_not_open():
+def test_classify_posting_passes_but_records_not_open():
+    # Only role category + Summer 2027 term are hard filters - still_open
+    # is recorded as data, not used to exclude the posting.
     client = FakeGeminiClient(
         {
             "still_open": False,
@@ -57,10 +61,12 @@ def test_classify_posting_fails_when_not_open():
         }
     )
     result = classify_posting(client, _posting())
-    assert result.passed is False
+    assert result.passed is True
+    assert result.still_open is False
 
 
-def test_classify_posting_fails_when_senior_only():
+def test_classify_posting_passes_but_records_senior_only_eligibility():
+    # eligibility is recorded as data, not used to exclude the posting.
     client = FakeGeminiClient(
         {
             "still_open": True,
@@ -72,8 +78,26 @@ def test_classify_posting_fails_when_senior_only():
         }
     )
     result = classify_posting(client, _posting())
-    assert result.passed is False
+    assert result.passed is True
     assert result.eligibility == "senior_only"
+
+
+def test_classify_posting_passes_but_records_unpaid_and_non_us():
+    # paid and US-based are recorded as data, not used to exclude the posting.
+    client = FakeGeminiClient(
+        {
+            "still_open": True,
+            "is_summer_2027": True,
+            "is_paid": False,
+            "is_us_based": False,
+            "eligibility": "all_levels",
+            "role_category": "swe_ai_ml",
+        }
+    )
+    result = classify_posting(client, _posting())
+    assert result.passed is True
+    assert result.paid is False
+    assert result.us_based is False
 
 
 def test_classify_posting_fails_when_wrong_role_category():
@@ -85,6 +109,21 @@ def test_classify_posting_fails_when_wrong_role_category():
             "is_us_based": True,
             "eligibility": "all_levels",
             "role_category": "other",
+        }
+    )
+    result = classify_posting(client, _posting())
+    assert result.passed is False
+
+
+def test_classify_posting_fails_when_not_summer_2027():
+    client = FakeGeminiClient(
+        {
+            "still_open": True,
+            "is_summer_2027": False,
+            "is_paid": True,
+            "is_us_based": True,
+            "eligibility": "all_levels",
+            "role_category": "swe_ai_ml",
         }
     )
     result = classify_posting(client, _posting())

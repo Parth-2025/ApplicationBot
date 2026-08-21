@@ -69,7 +69,10 @@ def run_discovery(
             if _is_fuzzy_duplicate(posting, existing_jobs):
                 continue
 
-            eligibility = Eligibility(result.eligibility)
+            try:
+                eligibility = Eligibility(result.eligibility)
+            except ValueError:
+                eligibility = Eligibility.other
             job = crud.create_or_update_job(
                 db,
                 schemas.JobCreate(
@@ -80,6 +83,8 @@ def run_discovery(
                     location=posting.location,
                     paid=result.paid,
                     eligibility=eligibility,
+                    still_open=result.still_open,
+                    us_based=result.us_based,
                     posted_date=posting.posted_date,
                     discovered_date=date.today(),
                     raw_job_description=posting.raw_description,

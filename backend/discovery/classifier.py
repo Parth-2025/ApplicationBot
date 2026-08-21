@@ -30,6 +30,8 @@ class ClassificationResult:
     passed: bool
     eligibility: str
     paid: bool
+    still_open: bool
+    us_based: bool
 
 
 def classify_posting(client: GeminiClient, posting: RawPosting) -> ClassificationResult | None:
@@ -45,16 +47,17 @@ def classify_posting(client: GeminiClient, posting: RawPosting) -> Classificatio
         return None
 
     eligibility = result.get("eligibility", "other")
+    # Only role category and Summer 2027 term are hard filters. Open/paid/
+    # US-based/eligibility are recorded as data on the job, not used to
+    # exclude it - the user wants a wide net on everything except role+year.
     passed = (
-        result.get("still_open") is True
-        and result.get("is_summer_2027") is True
-        and result.get("is_paid") is True
-        and result.get("is_us_based") is True
-        and eligibility in ("soph_junior", "all_levels")
+        result.get("is_summer_2027") is True
         and result.get("role_category") == "swe_ai_ml"
     )
     return ClassificationResult(
         passed=passed,
         eligibility=eligibility,
         paid=bool(result.get("is_paid", False)),
+        still_open=bool(result.get("still_open", True)),
+        us_based=bool(result.get("is_us_based", True)),
     )

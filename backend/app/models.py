@@ -36,6 +36,8 @@ class Job(Base):
     location = Column(String, nullable=True)
     paid = Column(Boolean, nullable=False, default=True)
     eligibility = Column(Enum(Eligibility), nullable=False, default=Eligibility.other)
+    still_open = Column(Boolean, nullable=False, default=True)
+    us_based = Column(Boolean, nullable=False, default=True)
     posted_date = Column(Date, nullable=True)
     discovered_date = Column(Date, nullable=False)
     status = Column(Enum(JobStatus), nullable=False, default=JobStatus.new)

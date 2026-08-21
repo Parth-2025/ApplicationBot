@@ -12,6 +12,8 @@ class JobBase(BaseModel):
     location: Optional[str] = None
     paid: bool = True
     eligibility: Eligibility = Eligibility.other
+    still_open: bool = True
+    us_based: bool = True
     posted_date: Optional[date] = None
     raw_job_description: Optional[str] = None
 

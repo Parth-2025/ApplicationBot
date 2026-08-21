@@ -31,6 +31,8 @@ def create_or_update_job(db: Session, job_in: schemas.JobCreate) -> models.Job:
         existing.raw_job_description = job_in.raw_job_description
         existing.paid = job_in.paid
         existing.eligibility = job_in.eligibility
+        existing.still_open = job_in.still_open
+        existing.us_based = job_in.us_based
         existing.location = job_in.location
         existing.posted_date = job_in.posted_date
         db.commit()

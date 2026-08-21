@@ -1,4 +1,5 @@
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import date
 from difflib import SequenceMatcher
@@ -8,7 +9,7 @@ from app.database import SessionLocal
 from app.models import Eligibility, JobStatus
 
 from .adapters.base import Adapter, RawPosting
-from .classifier import classify_posting
+from .classifier import ClassificationResult, classify_posting
 
 
 @dataclass
@@ -36,11 +37,34 @@ def _is_fuzzy_duplicate(posting: RawPosting, existing_jobs) -> bool:
     return False
 
 
+def _classify_postings(
+    classifier_client,
+    postings: list[RawPosting],
+    sleep_between_gemini_calls: float,
+    max_concurrent_classifications: int,
+) -> list[ClassificationResult | None]:
+    def _classify_one(posting: RawPosting) -> ClassificationResult | None:
+        result = classify_posting(classifier_client, posting)
+        if sleep_between_gemini_calls:
+            time.sleep(sleep_between_gemini_calls)
+        return result
+
+    # Classification calls are I/O-bound (network round-trips to Gemini),
+    # so a small thread pool gives a near-linear speedup over doing them
+    # one at a time. Each worker still paces itself with the same sleep,
+    # so aggregate throughput scales with worker count while any single
+    # worker's call rate stays bounded, keeping this within free-tier
+    # expectations rather than firing every call at once.
+    with ThreadPoolExecutor(max_workers=max_concurrent_classifications) as executor:
+        return list(executor.map(_classify_one, postings))
+
+
 def run_discovery(
     adapters: list[Adapter],
     classifier_client,
     db_session_factory=SessionLocal,
     sleep_between_gemini_calls: float = 1.0,
+    max_concurrent_classifications: int = 5,
 ) -> RunSummary:
     summary = RunSummary()
     all_postings: list[RawPosting] = []
@@ -53,15 +77,15 @@ def run_discovery(
 
     summary.found = len(all_postings)
 
+    classification_results = _classify_postings(
+        classifier_client, all_postings, sleep_between_gemini_calls, max_concurrent_classifications
+    )
+
     db = db_session_factory()
     try:
         existing_jobs = crud.list_jobs(db)
 
-        for posting in all_postings:
-            result = classify_posting(classifier_client, posting)
-            if sleep_between_gemini_calls:
-                time.sleep(sleep_between_gemini_calls)
-
+        for posting, result in zip(all_postings, classification_results):
             if result is None or not result.passed:
                 continue
             summary.passed_filter += 1

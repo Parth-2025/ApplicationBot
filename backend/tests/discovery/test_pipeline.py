@@ -210,3 +210,46 @@ def test_gemini_classification_failure_is_skipped_not_counted_as_error(db_sessio
     assert summary.passed_filter == 0
     assert summary.written == 0
     assert summary.errors == []
+
+
+def test_concurrent_classification_keeps_results_matched_to_their_posting(db_session_factory):
+    # Classification runs on a thread pool for speed - verify each posting
+    # still ends up written under its own correct company/role, not mixed
+    # up with another posting's result under concurrency. Company/role
+    # names must be genuinely distinct (not near-duplicates of each other)
+    # so the fuzzy-dedup check doesn't collapse them into one write.
+    companies = [
+        "Alpha Robotics", "Beacon Systems", "Cobalt Analytics", "Driftwood Labs",
+        "Everline Health", "Fjordly Games", "Granite Freight", "Hollow Point Security",
+        "Ironclad Finance", "Jubilee Media",
+    ]
+    postings = [
+        _posting(
+            company=companies[i],
+            role_title=f"AI Engineering Intern - Team {companies[i]}",
+            source_url=f"https://example.com/jobs/{i}",
+        )
+        for i in range(10)
+    ]
+    adapter = FakeAdapter(postings=postings)
+    client = FakeClassifierClient(
+        {f"Team {companies[i]}": _passing_result() for i in range(10)}
+    )
+
+    summary = run_discovery(
+        adapters=[adapter],
+        classifier_client=client,
+        db_session_factory=db_session_factory,
+        sleep_between_gemini_calls=0,
+        max_concurrent_classifications=5,
+    )
+
+    assert summary.found == 10
+    assert summary.written == 10
+
+    jobs = crud.list_jobs(db_session_factory())
+    assert len(jobs) == 10
+    for company in companies:
+        matching = [j for j in jobs if j.company == company]
+        assert len(matching) == 1
+        assert matching[0].role_title == f"AI Engineering Intern - Team {company}"

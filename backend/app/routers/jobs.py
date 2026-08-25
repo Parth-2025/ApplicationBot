@@ -77,7 +77,13 @@ _gemini_client: GeminiClient | None = None
 def get_gemini_client() -> GeminiClient:
     global _gemini_client
     if _gemini_client is None:
-        _gemini_client = GeminiClient()
+        try:
+            _gemini_client = GeminiClient()
+        except RuntimeError:
+            raise HTTPException(
+                status_code=503,
+                detail="GEMINI_API_KEY not set - see README",
+            )
     return _gemini_client
 
 

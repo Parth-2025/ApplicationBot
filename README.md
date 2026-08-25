@@ -92,3 +92,60 @@ venv/bin/python discover.py
    seconds; edit the plist to change the interval). Logs go to
    `backend/discovery.log`.
 4. To stop it: `launchctl unload ~/Library/LaunchAgents/com.applicationbot.discovery.plist`
+
+## Resume Tailoring
+
+Resume Tailoring generates a draft of your resume tailored to a specific
+job posting, using Gemini to rewrite your master resume around that
+posting's requirements. You review the draft, edit it as needed, and save
+it against the job.
+
+### One-time setup
+
+1. Install the new dependencies if you haven't already:
+   `cd backend && venv/bin/pip install -r requirements.txt`
+   (this adds `pypdf`, used to extract text from your resume PDF).
+2. Load your master resume text into the tracker:
+   ```bash
+   cd backend
+   venv/bin/python load_resume.py <path-to-your-resume.pdf>
+   ```
+   This is required before tailoring will work - without it,
+   "Generate Tailored Resume" returns a 404 ("No master resume loaded").
+   Re-running `load_resume.py` replaces the previously stored resume, so
+   re-run it whenever you update your real resume.
+
+### Using it
+
+1. Open a job's detail page in the dashboard.
+2. Click "Generate Tailored Resume" to have Gemini draft a tailored
+   version based on your master resume and that job's posting.
+3. Review and edit the draft as needed.
+4. Click "Save" to store it against the job.
+
+## Upgrading an existing database
+
+The `applications` table's `tailored_resume_path` column was renamed to
+`tailored_resume_text` (and changed to store resume text directly rather
+than a file path) as part of adding Resume Tailoring. This repo has no
+migration framework (no Alembic), and `Base.metadata.create_all` only
+creates missing tables - it never alters existing ones - so if you have
+an existing `backend/applicationbot.db` from before this change, the
+`/jobs` endpoints will 500 with `sqlite3.OperationalError: no such
+column: applications.tailored_resume_text` until you apply this one-time
+fix:
+
+```bash
+cd backend
+venv/bin/python -c "
+import sqlite3
+conn = sqlite3.connect('applicationbot.db')
+conn.execute('ALTER TABLE applications ADD COLUMN tailored_resume_text TEXT')
+conn.commit()
+print('Migration applied.')
+"
+```
+
+If you're starting from a fresh database (no pre-existing
+`applicationbot.db`), no action is needed - `create_all` will create the
+table with the correct column already.

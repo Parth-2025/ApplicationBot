@@ -7,10 +7,13 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from fastapi import HTTPException
+
 from app.main import app
 from app.database import Base, get_db
 from app import crud, schemas
 from app.models import Eligibility, JobStatus
+from app.routers import jobs as jobs_router
 from app.routers.jobs import get_gemini_client
 from discovery.gemini_client import GeminiError
 
@@ -134,3 +137,27 @@ def test_save_returns_409_for_applied_job(client_factory):
         f"/jobs/{job.id}/tailor", json={"resume_text": "New text"}
     )
     assert response.status_code == 409
+
+
+@pytest.fixture(autouse=False)
+def reset_gemini_singleton():
+    """get_gemini_client caches a module-level singleton; reset it before
+    and after so this test doesn't leak state into/out of other tests."""
+    jobs_router._gemini_client = None
+    yield
+    jobs_router._gemini_client = None
+
+
+def test_get_gemini_client_raises_503_when_api_key_missing(
+    monkeypatch, reset_gemini_singleton
+):
+    def _raise_missing_key(*args, **kwargs):
+        raise RuntimeError("GEMINI_API_KEY not set in environment")
+
+    monkeypatch.setattr(jobs_router, "GeminiClient", _raise_missing_key)
+
+    with pytest.raises(HTTPException) as exc_info:
+        get_gemini_client()
+
+    assert exc_info.value.status_code == 503
+    assert "GEMINI_API_KEY" in exc_info.value.detail

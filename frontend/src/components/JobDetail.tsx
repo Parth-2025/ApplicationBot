@@ -1,20 +1,33 @@
 // frontend/src/components/JobDetail.tsx
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { Descriptions, Button, Space, message } from "antd";
-import { fetchJob, updateJobStatus } from "../api/client";
+import { Descriptions, Button, Space, message, Input } from "antd";
+import {
+  fetchJob,
+  updateJobStatus,
+  generateTailoredResume,
+  saveTailoredResume,
+} from "../api/client";
 import type { Job } from "../api/client";
 import MarkAppliedModal from "./MarkAppliedModal";
+
+const { TextArea } = Input;
 
 export default function JobDetail() {
   const { id } = useParams();
   const [job, setJob] = useState<Job | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const load = () => {
     if (!id) return;
     fetchJob(Number(id))
-      .then(setJob)
+      .then((fetched) => {
+        setJob(fetched);
+        setDraft(fetched.tailored_resume_text ?? "");
+      })
       .catch((err) =>
         message.error(err instanceof Error ? err.message : "Failed to load job")
       );
@@ -44,10 +57,41 @@ export default function JobDetail() {
     }
   };
 
+  const handleGenerate = async () => {
+    setGenerating(true);
+    try {
+      const { draft: generated } = await generateTailoredResume(job.id);
+      setDraft(generated);
+      message.success("Draft generated - review and save below");
+    } catch (err) {
+      message.error(
+        err instanceof Error ? err.message : "Failed to generate tailored resume"
+      );
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await saveTailoredResume(job.id, draft);
+      message.success("Tailored resume saved");
+      load();
+    } catch (err) {
+      message.error(
+        err instanceof Error ? err.message : "Failed to save tailored resume"
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // Mirrors backend ALLOWED_TRANSITIONS: new, tailored, and applied can all
   // transition to rejected.
   const canReject =
     job.status === "new" || job.status === "tailored" || job.status === "applied";
+  const canTailor = job.status === "new" || job.status === "tailored";
 
   return (
     <div>
@@ -76,13 +120,21 @@ export default function JobDetail() {
         )}
       </Descriptions>
 
-      {job.status === "tailored" && (
+      {canTailor && (
         <div style={{ margin: "16px 0" }}>
-          <iframe
-            title="tailored-resume"
-            src={`http://localhost:8000/jobs/${job.id}/resume`}
-            width="100%"
-            height="600px"
+          <Space style={{ marginBottom: 8 }}>
+            <Button loading={generating} onClick={handleGenerate}>
+              Generate Tailored Resume
+            </Button>
+            <Button type="primary" loading={saving} disabled={!draft} onClick={handleSave}>
+              Save
+            </Button>
+          </Space>
+          <TextArea
+            rows={20}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="Click Generate to draft a tailored resume, or paste/edit your own here before saving."
           />
         </div>
       )}

@@ -15,6 +15,7 @@ export interface Job {
   applied_date?: string | null;
   application_number?: string | null;
   notes?: string | null;
+  tailored_resume_text: string | null;
 }
 
 const API_BASE = "http://localhost:8000";
@@ -65,5 +66,30 @@ export async function updateJobStatus(id: number, status: string): Promise<Job> 
   });
   if (!res.ok)
     throw new Error(await extractErrorMessage(res, "Failed to update job status"));
+  return res.json();
+}
+
+export async function generateTailoredResume(
+  id: number
+): Promise<{ draft: string }> {
+  const res = await fetch(`${API_BASE}/jobs/${id}/tailor/generate`, {
+    method: "POST",
+  });
+  if (!res.ok)
+    throw new Error(await extractErrorMessage(res, "Failed to generate tailored resume"));
+  return res.json();
+}
+
+export async function saveTailoredResume(
+  id: number,
+  resumeText: string
+): Promise<Job> {
+  const res = await fetch(`${API_BASE}/jobs/${id}/tailor`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ resume_text: resumeText }),
+  });
+  if (!res.ok)
+    throw new Error(await extractErrorMessage(res, "Failed to save tailored resume"));
   return res.json();
 }

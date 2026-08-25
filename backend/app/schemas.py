@@ -38,4 +38,4 @@ class JobOut(JobBase):
     applied_date: Optional[date] = None
     application_number: Optional[str] = None
     notes: Optional[str] = None
-    tailored_resume_path: Optional[str] = None
+    tailored_resume_text: Optional[str] = None

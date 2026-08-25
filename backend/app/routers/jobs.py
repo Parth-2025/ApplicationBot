@@ -9,7 +9,7 @@ router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 def _to_job_out(job: models.Job) -> schemas.JobOut:
     """Convert an ORM Job to JobOut, overlaying the latest Application's
-    fields (applied_date, application_number, notes, tailored_resume_path)
+    fields (applied_date, application_number, notes, tailored_resume_text)
     if one exists, since those fields live on a separate table."""
     job_out = schemas.JobOut.model_validate(job)
     if job.applications:
@@ -17,7 +17,7 @@ def _to_job_out(job: models.Job) -> schemas.JobOut:
         job_out.applied_date = latest.applied_date
         job_out.application_number = latest.application_number
         job_out.notes = latest.notes
-        job_out.tailored_resume_path = latest.tailored_resume_path
+        job_out.tailored_resume_text = latest.tailored_resume_text
     return job_out
 
 
@@ -75,7 +75,7 @@ def get_resume(job_id: int, db: Session = Depends(get_db)):
     job = crud.get_job(db, job_id)
     if job is None or not job.applications:
         raise HTTPException(status_code=404, detail="No tailored resume for this job")
-    resume_path = job.applications[-1].tailored_resume_path
+    resume_path = job.applications[-1].tailored_resume_text
     if not resume_path:
         raise HTTPException(status_code=404, detail="No tailored resume for this job")
     return FileResponse(resume_path, media_type="application/pdf")

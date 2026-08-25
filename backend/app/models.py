@@ -53,10 +53,18 @@ class Application(Base):
 
     id = Column(Integer, primary_key=True)
     job_id = Column(Integer, ForeignKey("jobs.id"), nullable=False)
-    tailored_resume_path = Column(String, nullable=True)
+    tailored_resume_text = Column(Text, nullable=True)
     contact_email = Column(String, nullable=True)
     applied_date = Column(Date, nullable=True)
     application_number = Column(String, nullable=True)
     notes = Column(Text, nullable=True)
 
     job = relationship("Job", back_populates="applications")
+
+
+class MasterResume(Base):
+    __tablename__ = "master_resumes"
+
+    id = Column(Integer, primary_key=True)
+    content = Column(Text, nullable=False)
+    updated_date = Column(Date, nullable=False)

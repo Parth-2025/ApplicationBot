@@ -7,6 +7,23 @@ class InvalidStatusTransition(Exception):
     pass
 
 
+def get_master_resume(db: Session) -> models.MasterResume | None:
+    return db.query(models.MasterResume).filter(models.MasterResume.id == 1).first()
+
+
+def save_master_resume(db: Session, content: str) -> models.MasterResume:
+    resume = db.query(models.MasterResume).filter(models.MasterResume.id == 1).first()
+    if resume is None:
+        resume = models.MasterResume(id=1, content=content, updated_date=date.today())
+        db.add(resume)
+    else:
+        resume.content = content
+        resume.updated_date = date.today()
+    db.commit()
+    db.refresh(resume)
+    return resume
+
+
 ALLOWED_TRANSITIONS = {
     models.JobStatus.new: {models.JobStatus.tailored, models.JobStatus.ignored, models.JobStatus.rejected},
     models.JobStatus.tailored: {models.JobStatus.ignored, models.JobStatus.rejected},

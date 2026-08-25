@@ -66,7 +66,7 @@ def test_mark_applied_creates_application_record(db_session):
 
 def test_mark_applied_updates_existing_application_record(db_session):
     # Simulates the future resume-tailoring flow: an Application row already
-    # exists (e.g. with a tailored_resume_path) before mark_applied runs.
+    # exists (e.g. with a tailored_resume_text) before mark_applied runs.
     from app import models
 
     job = crud.create_or_update_job(db_session, make_job_in())
@@ -74,7 +74,7 @@ def test_mark_applied_updates_existing_application_record(db_session):
 
     existing_application = models.Application(
         job_id=job.id,
-        tailored_resume_path="/tmp/resume.pdf",
+        tailored_resume_text="Existing tailored resume text",
     )
     db_session.add(existing_application)
     db_session.commit()
@@ -92,7 +92,7 @@ def test_mark_applied_updates_existing_application_record(db_session):
     assert len(updated.applications) == 1
     application = updated.applications[0]
     assert application.id == existing_application.id
-    assert application.tailored_resume_path == "/tmp/resume.pdf"
+    assert application.tailored_resume_text == "Existing tailored resume text"
     assert application.applied_date == date(2026, 8, 21)
     assert application.application_number == "APP-456"
     assert application.notes == "Updated in place"
@@ -105,3 +105,24 @@ def test_applied_to_rejected_transition(db_session):
 
     updated = crud.update_job_status(db_session, job, JobStatus.rejected)
     assert updated.status == JobStatus.rejected
+
+
+def test_get_master_resume_returns_none_when_not_loaded(db_session):
+    assert crud.get_master_resume(db_session) is None
+
+
+def test_save_master_resume_creates_row(db_session):
+    resume = crud.save_master_resume(db_session, "My resume content")
+    assert resume.content == "My resume content"
+    assert resume.updated_date == date.today()
+    assert crud.get_master_resume(db_session).content == "My resume content"
+
+
+def test_save_master_resume_overwrites_existing_row(db_session):
+    crud.save_master_resume(db_session, "First version")
+    crud.save_master_resume(db_session, "Second version")
+
+    from app.models import MasterResume
+
+    assert db_session.query(MasterResume).count() == 1
+    assert crud.get_master_resume(db_session).content == "Second version"

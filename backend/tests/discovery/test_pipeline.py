@@ -272,6 +272,47 @@ def test_batch_size_splits_postings_across_multiple_calls(db_session_factory):
     assert len(client.prompts) == 2  # 2 postings in the first call, 1 in the second
 
 
+def test_skips_classification_for_posting_with_known_source_url(db_session_factory):
+    # A posting whose exact source_url is already in the DB shouldn't spend
+    # a Gemini call re-classifying it - it can't produce a new job either
+    # way (create_or_update_job would just upsert the same row).
+    db = db_session_factory()
+    crud.create_or_update_job(
+        db,
+        schemas.JobCreate(
+            company="Acme",
+            role_title="AI Engineering Intern",
+            source="greenhouse",
+            source_url="https://example.com/jobs/1",
+            discovered_date=date.today(),
+            eligibility=Eligibility.soph_junior,
+        ),
+    )
+
+    adapter = FakeAdapter(postings=[_posting()])  # same source_url as above
+    client = FakeClassifierClient({})  # no results configured - must not be called
+
+    summary = run_discovery(adapters=[adapter], classifier_client=client, db_session_factory=db_session_factory)
+
+    assert summary.found == 1
+    assert summary.passed_filter == 0
+    assert client.prompts == []
+
+
+def test_skips_classification_for_non_internship_title(db_session_factory):
+    # Job-board adapters return a company's whole board, not just
+    # internships - titles with no intern/co-op signal shouldn't burn a
+    # Gemini call at all.
+    adapter = FakeAdapter(postings=[_posting(role_title="Senior Software Engineer")])
+    client = FakeClassifierClient({})  # no results configured - must not be called
+
+    summary = run_discovery(adapters=[adapter], classifier_client=client, db_session_factory=db_session_factory)
+
+    assert summary.found == 1
+    assert summary.passed_filter == 0
+    assert client.prompts == []
+
+
 def test_quota_exhausted_stops_run_but_keeps_progress_already_made(db_session_factory):
     from discovery.gemini_client import GeminiQuotaExhaustedError
 

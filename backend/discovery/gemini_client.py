@@ -81,21 +81,13 @@ class GeminiClient:
             raise result["error"]
         return result["response"]
 
-    def generate_json(self, prompt: str, retries: int = 1):
+    def _generate_with_retry(self, prompt: str, retries: int) -> str:
         last_error: Exception | None = None
         for attempt in range(retries + 1):
             self._wait_for_rate_limit()
             try:
                 response = self._call_model(prompt)
-                text = response.text.strip()
-                if text.startswith("```"):
-                    text = text.strip("`")
-                    if text.lower().startswith("json"):
-                        text = text[4:]
-                return json.loads(text.strip())
-            except json.JSONDecodeError as exc:
-                last_error = exc
-                break
+                return response.text.strip()
             except Exception as exc:  # noqa: BLE001 - any Gemini SDK/network failure
                 last_error = exc
                 # Daily-quota exhaustion won't clear up by retrying seconds
@@ -108,3 +100,17 @@ class GeminiClient:
                 if attempt < retries:
                     time.sleep(2**attempt)
         raise GeminiError(f"Gemini call failed after {retries + 1} attempt(s): {last_error}")
+
+    def generate_text(self, prompt: str, retries: int = 1) -> str:
+        return self._generate_with_retry(prompt, retries)
+
+    def generate_json(self, prompt: str, retries: int = 1):
+        text = self._generate_with_retry(prompt, retries)
+        if text.startswith("```"):
+            text = text.strip("`")
+            if text.lower().startswith("json"):
+                text = text[4:]
+        try:
+            return json.loads(text.strip())
+        except json.JSONDecodeError as exc:
+            raise GeminiError(f"Gemini call returned invalid JSON: {exc}") from exc

@@ -122,3 +122,28 @@ def test_per_minute_quota_error_still_retries_normally():
     result = client.generate_json("prompt", retries=1)
     assert result == {"a": 1}
     assert model.calls == 2
+
+
+def test_generate_text_returns_raw_text():
+    model = FakeModel(["Some tailored resume text here."])
+    client = GeminiClient(model=model, min_seconds_between_calls=0)
+    assert client.generate_text("prompt") == "Some tailored resume text here."
+
+
+def test_generate_text_retries_then_succeeds():
+    model = FakeModel([RuntimeError("boom"), "final text"])
+    client = GeminiClient(model=model, min_seconds_between_calls=0)
+    result = client.generate_text("prompt", retries=1)
+    assert result == "final text"
+    assert model.calls == 2
+
+
+def test_generate_text_raises_quota_exhausted_without_retrying():
+    quota_error = RuntimeError(
+        "429 quota exceeded ... GenerateRequestsPerDayPerProjectPerModel-FreeTier ..."
+    )
+    model = FakeModel([quota_error])
+    client = GeminiClient(model=model, min_seconds_between_calls=0)
+    with pytest.raises(GeminiQuotaExhaustedError):
+        client.generate_text("prompt", retries=3)
+    assert model.calls == 1

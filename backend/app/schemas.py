@@ -39,3 +39,11 @@ class JobOut(JobBase):
     application_number: Optional[str] = None
     notes: Optional[str] = None
     tailored_resume_text: Optional[str] = None
+
+
+class TailorGenerateResponse(BaseModel):
+    draft: str
+
+
+class TailorSaveRequest(BaseModel):
+    resume_text: str

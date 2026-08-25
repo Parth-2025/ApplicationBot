@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
+from discovery.gemini_client import GeminiClient, GeminiError
 from .. import crud, models, schemas
 from ..database import get_db
+from ..tailoring import generate_tailored_resume
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -70,12 +71,52 @@ def update_job(
         raise HTTPException(status_code=409, detail=str(exc))
 
 
-@router.get("/{job_id}/resume")
-def get_resume(job_id: int, db: Session = Depends(get_db)):
+_gemini_client: GeminiClient | None = None
+
+
+def get_gemini_client() -> GeminiClient:
+    global _gemini_client
+    if _gemini_client is None:
+        _gemini_client = GeminiClient()
+    return _gemini_client
+
+
+@router.post("/{job_id}/tailor/generate", response_model=schemas.TailorGenerateResponse)
+def generate_tailor_draft(
+    job_id: int,
+    db: Session = Depends(get_db),
+    gemini_client: GeminiClient = Depends(get_gemini_client),
+):
     job = crud.get_job(db, job_id)
-    if job is None or not job.applications:
-        raise HTTPException(status_code=404, detail="No tailored resume for this job")
-    resume_path = job.applications[-1].tailored_resume_text
-    if not resume_path:
-        raise HTTPException(status_code=404, detail="No tailored resume for this job")
-    return FileResponse(resume_path, media_type="application/pdf")
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    master_resume = crud.get_master_resume(db)
+    if master_resume is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No master resume loaded - run load_resume.py first",
+        )
+
+    try:
+        draft = generate_tailored_resume(gemini_client, master_resume.content, job)
+    except GeminiError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    return schemas.TailorGenerateResponse(draft=draft)
+
+
+@router.post("/{job_id}/tailor", response_model=schemas.JobOut)
+def save_tailor_draft(
+    job_id: int, payload: schemas.TailorSaveRequest, db: Session = Depends(get_db)
+):
+    job = crud.get_job(db, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    try:
+        updated = crud.save_tailored_resume(db, job, payload.resume_text)
+    except crud.InvalidStatusTransition as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+    return _to_job_out(updated)

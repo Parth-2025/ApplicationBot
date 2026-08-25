@@ -114,3 +114,29 @@ def mark_applied(
     db.commit()
     db.refresh(job)
     return job
+
+
+def save_tailored_resume(db: Session, job: models.Job, resume_text: str) -> models.Job:
+    if job.status not in (models.JobStatus.new, models.JobStatus.tailored):
+        raise InvalidStatusTransition(
+            f"Cannot save a tailored resume for job {job.id} in status {job.status.value}"
+        )
+
+    application = (
+        db.query(models.Application)
+        .filter(models.Application.job_id == job.id)
+        .order_by(models.Application.id.desc())
+        .first()
+    )
+    if application is None:
+        application = models.Application(job_id=job.id)
+        db.add(application)
+
+    application.tailored_resume_text = resume_text
+
+    if job.status == models.JobStatus.new:
+        job.status = models.JobStatus.tailored
+
+    db.commit()
+    db.refresh(job)
+    return job

@@ -126,3 +126,33 @@ def test_save_master_resume_overwrites_existing_row(db_session):
 
     assert db_session.query(MasterResume).count() == 1
     assert crud.get_master_resume(db_session).content == "Second version"
+
+
+def test_save_tailored_resume_first_save_transitions_new_to_tailored(db_session):
+    job = crud.create_or_update_job(db_session, make_job_in())
+
+    updated = crud.save_tailored_resume(db_session, job, "Tailored resume text")
+
+    assert updated.status == JobStatus.tailored
+    assert len(updated.applications) == 1
+    assert updated.applications[0].tailored_resume_text == "Tailored resume text"
+
+
+def test_save_tailored_resume_regenerate_when_already_tailored(db_session):
+    job = crud.create_or_update_job(db_session, make_job_in())
+    crud.save_tailored_resume(db_session, job, "First draft")
+
+    updated = crud.save_tailored_resume(db_session, job, "Second draft")
+
+    assert updated.status == JobStatus.tailored
+    assert len(updated.applications) == 1  # updated in place, not duplicated
+    assert updated.applications[0].tailored_resume_text == "Second draft"
+
+
+def test_save_tailored_resume_rejects_applied_job(db_session):
+    job = crud.create_or_update_job(db_session, make_job_in())
+    crud.update_job_status(db_session, job, JobStatus.tailored)
+    crud.mark_applied(db_session, job, applied_date=date(2026, 8, 21))
+
+    with pytest.raises(crud.InvalidStatusTransition):
+        crud.save_tailored_resume(db_session, job, "New draft")
